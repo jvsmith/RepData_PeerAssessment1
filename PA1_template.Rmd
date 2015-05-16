@@ -1,25 +1,172 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "PA1_template"
+author: "Joel Smith"
+date: "05/16/2015"
+output: html_document
 ---
+# Project 1
 
+This document describes the steps I took to complete this assignment which "makes use of data from a personal activity monitoring device." "The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day."
 
-## Loading and preprocessing the data
+# Data
 
+The description of the data is directly quoted from the assignment: 
 
+The data for this assignment can be downloaded from the course web site:
+
+ - Dataset: Activity monitoring data 
+ 
+The variables included in this dataset are:
+
+ - steps: Number of steps taking in a 5-minute interval (missing values are coded as NA)
+ - date: The date on which the measurement was taken in YYYY-MM-DD format
+ - interval: Identifier for the 5-minute interval in which measurement was taken
+
+The dataset is stored in a comma-separated-value (CSV) file and there are a total of 17,568 observations in this dataset.
+
+# Assignment
+
+## Loading and Preprocessing data
+
+In this section I 
+
+ - download the data from https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip, 
+ - unzip the contents using the unz command
+ - read it into a data frame, activity
+ - create date3 variable
+ - and for a later section create the factor variable weekend
+ 
+```{r, echo=TRUE}
+url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+download.file(url, method="curl", destfile="activity.zip")
+activity <- read.csv(unz("activity.zip", filename="activity.csv"))
+activity$date2 <- as.character(activity$date)
+activity$date3 <- as.Date(activity$date2, "%Y-%m-%d")
+activity$weekend <- factor(x=weekdays(activity$date3) %in% c("Saturday", "Sunday"), levels=c(TRUE, FALSE), labels=c("Weekend", "Weekday"))
+```
 
 ## What is mean total number of steps taken per day?
 
+In this section I will "ignore missing values in the dataset." I will do this using the suggestion from http://r.789695.n4.nabble.com/aggregate-function-na-action-td3261043.html which explains: 
+The subtle distinction between na.action=na.omit and na.rm=TRUE with the function you're calling is that na.omit will remove the entire row of data when it encounters a missing value, while the na.rm=TRUE argument will remove missing values separately from each variable... This distinction can be exploited using the formula aggregate when invoking na.action=na.omit. This removes observations with missing values. 
 
+Removing missing observations is important. Without it aggregate would create observations for dates that have no non-missing information. 
 
-## What is the average daily activity pattern?
+### Calculate the total number of steps taken per day
 
+Use aggregate with the formula to remove observations with missing values.
 
+```{r}
+tot.na <- aggregate(.~date3, activity[, c("date3", "steps")], FUN=sum, na.action=na.omit)
+names(tot.na) <- c("date", "steps")
+tot.na
+```
+### Produce a histogram of the total number of steps taken each day
+
+```{r}
+hist(tot.na$steps, xlab="Number of Steps Per Day", main="Distribution of Total Number of Daily Steps", ylim=c(0,35))
+```
+
+### Calculate and report the mean and median of the total number of steps taken per day
+
+Using aggregate formula the na.action, omit missing observations from activity and calculate the mean number of steps per date. Report the mean and median number of steps by date.
+
+```{r}
+mean.steps <- aggregate(.~date3, activity[, c("date3", "steps")], FUN=mean, na.action=na.omit)
+names(mean.steps) <- c("date", "steps")
+median.steps <- aggregate(.~date3, activity[, c("date3", "steps")], FUN=median, na.action=na.omit)
+names(median.steps) <- c("date", "steps")
+stats <- merge(mean.steps, median.steps, by="date")
+names(stats) <- c("date", "mean.steps", "median.steps")
+stats
+```
 
 ## Imputing missing values
 
+There are eight dates with no non-missing values. "The presence of missing days may introduce bias into some calculations or summaries of the data." 
 
+Calculate and report the total number of missing values in the dataset.
+```{r}
+sum(is.na(activity$steps))
+```
+
+I will impute the missing values with the average number of steps taken by interval. Using an imputation method based on day will not work because certain days do not have any non-missing values. 
+
+Find mean (and median) number of steps by interval (using only observations with non-missing values).
+
+```{r}
+mean.steps <- aggregate(.~interval, activity[, c("interval", "steps")], FUN=mean, na.action=na.omit)
+names(mean.steps) <- c("interval", "steps")
+median.steps <- aggregate(.~interval, activity[, c("interval", "steps")], FUN=median, na.action=na.omit)
+names(median.steps) <- c("interval", "steps")
+imputed.stats <- merge(mean.steps, median.steps, by="interval")
+names(imputed.stats) <- c("interval", "mean.steps", "median.steps")
+```
+
+Create a new dataset that is equal to the original dataset but with the missing data filled in. 
+
+Using the mean number of steps by interval, reassign steps when missing to the mean number of steps given the observation's interval value.
+
+```{r}
+activity.imputed <- merge(activity[, c("steps", "interval", "date3", "weekend")], imputed.stats, by="interval", all.x=TRUE)
+activity.imputed$steps[which(is.na(activity.imputed$steps))] <- activity.imputed$mean.steps[which(is.na(activity.imputed$steps))]
+```
+
+Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day.
+
+```{r}
+tot <- aggregate(.~date3, activity.imputed[, c("date3", "steps")], FUN=sum, na.action=na.omit)
+names(tot) <- c("date", "steps")
+hist(tot$steps, xlab="Number of Steps Per Day", main="Distribution of Total Number of Daily Steps", ylim=c(0,35))
+## Calculate and report the mean and median total number of steps taken per day.
+mean.steps <- aggregate(.~date3, activity.imputed[, c("date3", "steps")], FUN=mean, na.action=na.omit)
+names(mean.steps) <- c("date", "steps")
+median.steps <- aggregate(.~date3, activity.imputed[, c("date3", "steps")], FUN=median, na.action=na.omit)
+names(median.steps) <- c("date", "steps")
+stats <- merge(mean.steps, median.steps, by="date")
+names(stats) <- c("date", "mean.steps", "median.steps")
+stats
+```
+
+### Do these values differ from the estimates from the first part of the assignment? 
+It is clear that the median number of steps changes by date, since more observations will now have contain non-missing values. For dates with no missing values the mean value will not be affected. The shape of the histogram also changes to reflect more mean values being added in the middle of the distribution. 
+
+```{r}
+mean.steps <- aggregate(.~date3, activity.imputed[, c("date3", "steps")], FUN=mean, na.action=na.omit)
+names(mean.steps) <- c("date", "steps")
+median.steps <- aggregate(.~date3, activity.imputed[, c("date3", "steps")], FUN=median, na.action=na.omit)
+names(median.steps) <- c("date", "steps")
+stats <- merge(mean.steps, median.steps, by="date")
+names(stats) <- c("date", "mean.steps", "median.steps")
+stats
+```
+
+### What is the impact of imputing missing data on the estimates of the total daily number of steps?
+
+The change will increase the number of daily steps in days that had no non-missing data.
+
+```{r}
+tot.na <- aggregate(.~date3, activity.imputed[, c("date3", "steps")], FUN=sum, na.action=na.omit)
+names(tot.na) <- c("date", "steps")
+tot.na
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+To answer this question I use the original data frame and remove observations with missing data. 
+
+```{r}
+mean.steps <- aggregate(.~interval+weekend, activity[, c("interval", "steps", "weekend")], FUN=mean, na.action=na.omit)
+library(ggplot2)
+qplot(interval, steps, data=mean.steps, facets=weekend ~ ., xlab="Interval", ylab="Average Number of Steps", geom="line") #+ geom_point(shape="l")
+```
+
+I repeat the analysis using the imputed data
+
+```{r}
+mean.steps <- aggregate(.~interval+weekend, activity.imputed[, c("interval", "steps", "weekend")], FUN=mean, na.action=na.omit)
+library(ggplot2)
+qplot(interval, steps, data=mean.steps, facets=weekend ~ ., xlab="Interval", ylab="Average Number of Steps", geom="line") #+ geom_point(shape="l")
+```
+
+It appears that weekday activity is concentrated or frequently occurs between the 500 to 1000 intervals. The same higher average occurs on the weekend, but a higher average number of steps occurs on the weekend beyond the 1000 interval.
